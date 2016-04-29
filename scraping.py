@@ -11,10 +11,10 @@ s.get(main_url)
 
 
 # todo: Получение списка марок
-# https://bibinet.ru/service/get_reference/?callback=json&variants=mark
+# https://bibinet.ru/service/get_reference/?variants=mark
 
 # todo: Получение списка моделей
-# https://bibinet.ru/service/get_reference/?callback=json&variants=model&format=jsonp&mark=1&is_used_part=1
+# https://bibinet.ru/service/get_reference/?variants=model&mark=4
 
 def get_marks(session):
     request = session.get(main_url)
