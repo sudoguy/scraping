@@ -88,6 +88,7 @@ for mark in marks_models:
         for page in range(1, 4):
             data = load_parts_data(mark, model, page, s)
             if contain_parts_data(data):
-                get_parts_data(data)
+                print(mark + '-' + model)
+                print(get_parts_data(data))
             else:
                 break
