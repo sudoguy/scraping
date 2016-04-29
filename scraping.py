@@ -1,6 +1,7 @@
 from pprint import pprint
 
-import requests, re
+import re
+import requests
 from bs4 import BeautifulSoup
 
 main_url = "https://bibinet.ru/catalog/parts_mark_model"
@@ -8,6 +9,12 @@ main_url = "https://bibinet.ru/catalog/parts_mark_model"
 s = requests.Session()
 s.get(main_url)
 
+
+# todo: Получение списка марок
+# https://bibinet.ru/service/get_reference/?callback=json&variants=mark
+
+# todo: Получение списка моделей
+# https://bibinet.ru/service/get_reference/?callback=json&variants=model&format=jsonp&mark=1&is_used_part=1
 
 def get_marks(session):
     request = session.get(main_url)
@@ -33,6 +40,7 @@ def get_models(session, mark):
             return models_list
 
 
+# Получаем страницу с запчастями
 def load_parts_data(mark, model, page, session):
     url = '/'.join((main_url, mark, model, '?page=' + str(page)))
     request = session.get(url)
@@ -42,26 +50,44 @@ def load_parts_data(mark, model, page, session):
 def contain_parts_data(text):
     soup = BeautifulSoup(text)
     parts_list = soup.find('tr', {'class': 'el'})
-    print(parts_list)
     return parts_list is not None
 
 
+def get_parts_data(text):
+    soup = BeautifulSoup(text)
+    items = soup.find('div', {'id': 'fs_rezult'}).find_all('tr', {'class': 'el'})
+
+    parts = []
+
+    for item in items:
+        soup = BeautifulSoup(str(item))
+        part_photo = None
+        part_name = soup.find('td', {'class': 'part'}).find('a').text
+        part_company = soup.find('td', {'class': 'company'}).find('a', {'class': 'link'}).text
+        tex = soup.find('div', {'class': 'price'}).text
+        if soup.find('div', {'class': 'price'}).text == 'по запросу':
+            part_price = 'цена по запросу'
+        else:
+            part_price = re.search(r'(\w| )+(?= руб)', soup.find('div', {'class': 'price'}).text).group().replace(' ',
+                                                                                                                  '')
+        parts.append([part_name, part_photo, part_company, part_price])
+
+    print(parts)
+    return parts
+
 marks = get_marks(s)
-qwer = r''
-# print(marks)
 marks_models = {}
 for x in marks:
     marks_models[x] = get_models(s, x)
 
-pprint(marks_models)
+# pprint(marks_models)
 
 # loading files
-# page = 1
-# for x in range(3):
-#     data = load_parts_data(mark, model, page, s)
-#     if contain_parts_data(data):
-#         with open('./%s_%s_page_%d.html' % (mark, model, page), 'w') as output_file:
-#             output_file.write(data)
-#             page += 1
-#     else:
-#         break
+for mark in marks_models:
+    for model in marks_models[mark]:
+        for page in range(1, 4):
+            data = load_parts_data(mark, model, page, s)
+            if contain_parts_data(data):
+                get_parts_data(data)
+            else:
+                break
