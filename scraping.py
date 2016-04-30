@@ -1,6 +1,7 @@
 from pprint import pprint
 
 import re
+
 import requests
 from bs4 import BeautifulSoup
 
@@ -68,12 +69,15 @@ def get_parts_data(text):
         if soup.find('div', {'class': 'price'}).text == 'по запросу':
             part_price = 'цена по запросу'
         else:
-            part_price = re.search(r'(\w| )+(?= руб)', soup.find('div', {'class': 'price'}).text).group().replace(' ',
-                                                                                                                  '')
+            part_price = re.search(r'(\d| )+(?= руб)', soup.find('div', {'class': 'price'}).text).group().replace(" ",
+                                                                                                                  "")
+        part_frame = soup.find('td', {'class': 'auto'}).find('strong').text
+        # part_engine = soup.find('td', {'class': 'auto'}).find('div').text
         parts.append([part_name, part_photo, part_company, part_price])
 
     print(parts)
     return parts
+
 
 marks = get_marks(s)
 marks_models = {}
@@ -88,7 +92,13 @@ for mark in marks_models:
         for page in range(1, 4):
             data = load_parts_data(mark, model, page, s)
             if contain_parts_data(data):
+                print('+-------------------------------------+')
                 print(mark + '-' + model)
-                print(get_parts_data(data))
+                print('PAGE #' + str(page))
+                parts_data = get_parts_data(data)
+                for part in parts_data:
+                    print('Наименование: ' + part[0])
+                    print('Компания: ' + part[2])
+                    print('Цена: ' + part[3])
             else:
                 break
