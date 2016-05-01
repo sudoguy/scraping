@@ -1,8 +1,7 @@
-from pprint import pprint
-
+import os
 import re
-
 import requests
+import shutil
 from bs4 import BeautifulSoup
 
 main_url = "https://bibinet.ru/catalog/parts_mark_model"
@@ -19,7 +18,7 @@ s.get(main_url)
 
 def get_marks(session):
     request = session.get(main_url)
-    soup = BeautifulSoup(request.text)
+    soup = BeautifulSoup(request.text, 'html.parser')
     marks_list = []
     marks = soup.find('div', {'class': 'catalog_list_punkt'}).find_all('a', {'class': 'el'})
     for mark in marks:
@@ -31,7 +30,7 @@ def get_models(session, mark):
     while True:
         request = session.get('/'.join((main_url, mark)))
         if request.status_code == 200:
-            soup = BeautifulSoup(request.text)
+            soup = BeautifulSoup(request.text, 'html.parser')
             models_list = []
             models = soup.find('div', {'class': 'catalog_list_punkt'}).find('div', {'class': 'sub'}).find_all('a', {
                 'class': 'el'})
@@ -49,33 +48,62 @@ def load_parts_data(mark, model, page, session):
 
 
 def contain_parts_data(text):
-    soup = BeautifulSoup(text)
+    soup = BeautifulSoup(text, 'html.parser')
     parts_list = soup.find('tr', {'class': 'el'})
     return parts_list is not None
 
 
-def get_parts_data(text):
-    soup = BeautifulSoup(text)
+def get_photo(link):
+    link = str(link).replace('c80x0', 'c800x0')
+    for x in range(10):
+        r = requests.get(link, stream=True)
+        if r.status_code == 200:
+            filename = re.search(r'(?<=parts/).+', link).group()
+            os.makedirs('photos/', exist_ok=True)
+            with open('photos/' + filename, 'wb') as f:
+                r.raw.decode_content = True
+                shutil.copyfileobj(r.raw, f)
+            return os.path.abspath('photos/%s' % filename)
+    else:
+        return None
+
+
+def get_parts_data(text, mark, model):
+    soup = BeautifulSoup(text, 'html.parser')
     items = soup.find('div', {'id': 'fs_rezult'}).find_all('tr', {'class': 'el'})
 
     parts = []
 
     for item in items:
-        soup = BeautifulSoup(str(item))
-        part_photo = None
+        soup = BeautifulSoup(str(item), 'html.parser')
+        photo_unavailable = '/static/v3/img/photo-unavailable-01.png'
+        if soup.find('td', {'class': 'photo'}).find('img')['src'] != photo_unavailable:
+            part_photo = get_photo('https://' + soup.find('td', {'class': 'photo'}).find('img')['src'][2:])
+        else:
+            part_photo = None
         part_name = soup.find('td', {'class': 'part'}).find('a').text
         part_company = soup.find('td', {'class': 'company'}).find('a', {'class': 'link'}).text
-        tex = soup.find('div', {'class': 'price'}).text
         if soup.find('div', {'class': 'price'}).text == 'по запросу':
-            part_price = 'цена по запросу'
+            part_price = None
         else:
             part_price = re.search(r'(\d| )+(?= руб)', soup.find('div', {'class': 'price'}).text).group().replace(" ",
                                                                                                                   "")
-        part_frame = soup.find('td', {'class': 'auto'}).find('strong').text
-        # part_engine = soup.find('td', {'class': 'auto'}).find('div').text
-        parts.append([part_name, part_photo, part_company, part_price])
+        parts_auto = str(soup.find('td', {'class': 'auto'}))
+        parts_frame = re.search(r'(?<=<br/>[Кк]узов: )(\w|\(|\)| |\.)+', parts_auto)
+        parts_year = re.search(r'(?<=<br/>[гГ]од выпуска: )\d{4}', parts_auto)
+        parts_engine = re.search(r'(?<=<br/>[Дд]вигатель: )(\w|\(|\)| |\.)+', parts_auto)
+        parts.append([
+            part_name,  # Тип запчасти
+            part_photo,  # Путь к фото
+            part_company,  # Название компании
+            parts_frame.group() if parts_frame else None,  # Тип кузова
+            parts_year.group() if parts_year else parts_year,  # Год выпуска
+            parts_engine.group() if parts_engine else parts_engine,  # Двигатель
+            part_price,  # Стоимость
+            str(mark).replace('_', ' '),  # Марка
+            str(model).replace('_', ' '),  # Модель
+        ])
 
-    print(parts)
     return parts
 
 
@@ -84,21 +112,23 @@ marks_models = {}
 for x in marks:
     marks_models[x] = get_models(s, x)
 
-# pprint(marks_models)
-
 # loading files
 for mark in marks_models:
     for model in marks_models[mark]:
-        for page in range(1, 4):
+        for page in range(1, 2):
             data = load_parts_data(mark, model, page, s)
             if contain_parts_data(data):
-                print('+-------------------------------------+')
-                print(mark + '-' + model)
-                print('PAGE #' + str(page))
-                parts_data = get_parts_data(data)
+                parts_data = get_parts_data(data, mark, model)
                 for part in parts_data:
-                    print('Наименование: ' + part[0])
+                    print('+-------------------------------------+')
+                    print('Марка: ' + part[7])
+                    print('Модель: ' + part[8])
+                    print('Тип запчасти: ' + part[0])
                     print('Компания: ' + part[2])
-                    print('Цена: ' + part[3])
+                    print('Тип кузова: ' + str(part[3]))
+                    print('Фото: ' + str(part[1]))
+                    print('Год выпуска: ' + str(part[4]))
+                    print('Двигатель: ' + str(part[5]))
+                    print('Цена: ' + part[6])
             else:
                 break
