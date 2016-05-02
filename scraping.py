@@ -2,6 +2,8 @@ import os
 import re
 import requests
 import shutil
+import json
+
 from bs4 import BeautifulSoup
 
 main_url = "https://bibinet.ru/catalog/parts_mark_model"
@@ -17,27 +19,47 @@ s.get(main_url)
 # https://bibinet.ru/service/get_reference/?variants=model&mark=4
 
 def get_marks(session):
-    request = session.get(main_url)
-    soup = BeautifulSoup(request.text, 'html.parser')
+    url = 'https://bibinet.ru/service/get_reference/?variants=mark'
+    resp = session.get(url)
+    marks_json = json.loads(resp.text)
     marks_list = []
-    marks = soup.find('div', {'class': 'catalog_list_punkt'}).find_all('a', {'class': 'el'})
-    for mark in marks:
-        marks_list.append(str(mark.text).replace(' ', '_'))
+    for mark in marks_json:
+        marks_list.append((mark[0], mark[1]))
     return marks_list
 
 
-def get_models(session, mark):
-    while True:
-        request = session.get('/'.join((main_url, mark)))
-        if request.status_code == 200:
-            soup = BeautifulSoup(request.text, 'html.parser')
-            models_list = []
-            models = soup.find('div', {'class': 'catalog_list_punkt'}).find('div', {'class': 'sub'}).find_all('a', {
-                'class': 'el'})
-            for model in models:
-                regex_result = re.search(r'(?<=%s ).+' % str(mark).replace('_', ' '), model.text)
-                models_list.append(regex_result.group().replace(' ', '_'))
-            return models_list
+# def get_marks(session):
+#     request = session.get(main_url)
+#     soup = BeautifulSoup(request.text, 'html.parser')
+#     marks_list = []
+#     marks = soup.find('div', {'class': 'catalog_list_punkt'}).find_all('a', {'class': 'el'})
+#     for mark in marks:
+#         marks_list.append(str(mark.text).replace(' ', '_'))
+#     return marks_list
+
+
+def get_models(session, mark_id):
+    url = 'https://bibinet.ru/service/get_reference/?variants=model&mark=' + str(mark_id)
+    resp = session.get(url)
+    models_json = json.loads(resp.text)
+    models_list = []
+    for model in models_json:
+        models_list.append(model[1])
+    return models_list
+
+
+# def get_models(session, mark):
+#     while True:
+#         request = session.get('/'.join((main_url, str(mark).replace(' ', '_'))))
+#         if request.status_code == 200:
+#             soup = BeautifulSoup(request.text, 'html.parser')
+#             models_list = []
+#             models = soup.find('div', {'class': 'catalog_list_punkt'}).find('div', {'class': 'sub'}).find_all('a', {
+#                 'class': 'el'})
+#             for model in models:
+#                 regex_result = re.search(r'(?<=%s ).+' % mark, model.text)
+#                 models_list.append(regex_result.group().replace(' ', '_'))
+#             return models_list
 
 
 # Получаем страницу с запчастями
@@ -77,10 +99,11 @@ def get_parts_data(text, mark, model):
     for item in items:
         soup = BeautifulSoup(str(item), 'html.parser')
         photo_unavailable = '/static/v3/img/photo-unavailable-01.png'
-        if soup.find('td', {'class': 'photo'}).find('img')['src'] != photo_unavailable:
-            part_photo = get_photo('https://' + soup.find('td', {'class': 'photo'}).find('img')['src'][2:])
-        else:
-            part_photo = None
+        # if soup.find('td', {'class': 'photo'}).find('img')['src'] != photo_unavailable:
+        #     part_photo = get_photo('https://' + soup.find('td', {'class': 'photo'}).find('img')['src'][2:])
+        # else:
+        #     part_photo = None
+        part_photo = None
         part_name = soup.find('td', {'class': 'part'}).find('a').text
         part_company = soup.find('td', {'class': 'company'}).find('a', {'class': 'link'}).text
         if soup.find('div', {'class': 'price'}).text == 'по запросу':
@@ -110,7 +133,7 @@ def get_parts_data(text, mark, model):
 marks = get_marks(s)
 marks_models = {}
 for x in marks:
-    marks_models[x] = get_models(s, x)
+    marks_models[x[1]] = get_models(s, x[0])
 
 # loading files
 for mark in marks_models:
@@ -129,6 +152,6 @@ for mark in marks_models:
                     print('Фото: ' + str(part[1]))
                     print('Год выпуска: ' + str(part[4]))
                     print('Двигатель: ' + str(part[5]))
-                    print('Цена: ' + part[6])
+                    print('Цена: ' + str(part[6]))
             else:
                 break
